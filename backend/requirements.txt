@@ -1,0 +1,54 @@
+# Clipped-AI Backend Requirements
+# Install inside a venv: pip install -r requirements.txt
+
+# --- Web Framework ---
+fastapi>=0.141.1
+uvicorn[standard]>=0.52.4
+python-multipart>=0.0.32
+
+# --- Data Validation ---
+pydantic>=2.14.1
+pydantic-settings>=2.6.0
+
+# --- Database ---
+sqlalchemy>=2.0.52
+alembic>=1.20.0
+asyncpg>=0.30.0          # PostgreSQL async driver
+psycopg2-binary>=2.9.10  # PostgreSQL sync driver (Alembic)
+aiosqlite>=0.20.0        # SQLite async driver (dev)
+
+# --- Authentication ---
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# --- Task Queue ---
+celery[redis]>=5.5.0
+redis>=8.1.0
+
+# --- AI: Gemini ---
+google-genai>=2.25.0
+
+# --- AI: Transcription ---
+faster-whisper>=1.1.0
+
+# --- AI: Scene Detection ---
+scenedetect[opencv]>=0.6.5
+
+# --- Storage ---
+boto3>=1.37.0           # S3-compatible (Cloudflare R2)
+aiofiles>=25.1.0
+
+# --- HTTP ---
+httpx>=0.28.1
+aiohttp>=3.11.0
+
+# --- Utilities ---
+python-dotenv>=1.0.1
+python-slugify>=8.0.4
+orjson>=3.10.12
+
+# --- Dev / Test ---
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+pytest-cov>=6.0.0
+httpx>=0.28.1            # test client
