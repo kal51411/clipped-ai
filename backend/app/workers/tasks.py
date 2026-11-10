@@ -215,6 +215,7 @@ def generate_clips_task(
     from app.ai.understanding.prompt_parser import parse_prompt
     from app.ai.clip_selection.candidate_generator import generate_candidates
     from app.ai.clip_selection.scorer import score_candidates
+    from app.video.rendering.renderer import render_clip
 
     db = _get_sync_db()
 
@@ -268,12 +269,13 @@ def generate_clips_task(
             use_gemini_rerank=settings.GEMINI_ENABLED,
         )
 
-        # ── Store top clips in DB ─────────────────────────────────────────────
-        _update_job(db, job_id, progress=0.85, progress_message="Saving results")
+        # ── Store and render top clips in DB ──────────────────────────────────
+        _update_job(db, job_id, progress=0.8, progress_message="Rendering playable clips")
         top_clips = scored[:num_candidates]
         clip_ids = []
+        rendered_count = 0
 
-        for scored_clip in top_clips:
+        for index, scored_clip in enumerate(top_clips):
             cand = scored_clip.candidate
             clip = Clip(
                 project_id=project_id,
@@ -285,11 +287,38 @@ def generate_clips_task(
                 score=scored_clip.score,
                 score_breakdown=scored_clip.score_breakdown,
                 rank=scored_clip.rank,
-                status="candidate",
+                status="rendering",
             )
             db.add(clip)
             db.flush()
             clip_ids.append(clip.id)
+
+            try:
+                output_dir = Path(settings.OUTPUT_DIR) / project_id
+                result = render_clip(
+                    source_video_path=video.storage_path,
+                    start_time=clip.start_time,
+                    end_time=clip.end_time,
+                    output_dir=str(output_dir),
+                    segments=clip.segments or [],
+                    include_captions=True,
+                    clip_id=clip.id,
+                )
+                clip.storage_path = result["output_path"]
+                clip.thumbnail_path = result.get("thumbnail_path")
+                clip.public_url = f"/media/output/{project_id}/{clip.id}.mp4"
+                clip.status = "ready"
+                rendered_count += 1
+            except Exception:
+                clip.status = "failed"
+                logger.exception("Clip candidate render failed", clip_id=clip.id)
+
+            _update_job(
+                db,
+                job_id,
+                progress=0.8 + (0.18 * (index + 1) / max(len(top_clips), 1)),
+                progress_message=f"Rendered {index + 1} of {len(top_clips)} clips",
+            )
 
         project.status = "ready"
         db.commit()
@@ -298,12 +327,12 @@ def generate_clips_task(
             db, job_id,
             status="completed",
             progress=1.0,
-            progress_message=f"Found {len(top_clips)} clip candidates",
+            progress_message=f"Ready: {rendered_count} of {len(top_clips)} clips rendered",
             completed_at=datetime.now(timezone.utc),
             result_data={"clip_ids": clip_ids, "total_candidates": len(scored)},
         )
 
-        logger.info("Clip generation complete", clips=len(top_clips))
+        logger.info("Clip generation complete", clips=len(top_clips), rendered=rendered_count)
         return {"status": "completed", "clip_ids": clip_ids}
 
     except Exception as e:
@@ -359,6 +388,7 @@ def render_clip_task(self: Task, job_id: str, clip_id: str) -> Dict[str, Any]:
 
         clip.storage_path = result["output_path"]
         clip.thumbnail_path = result.get("thumbnail_path")
+        clip.public_url = f"/media/output/{clip.project_id}/{clip.id}.mp4"
         clip.status = "ready"
         db.commit()
 
@@ -422,9 +452,8 @@ def export_clip_task(
 
         _update_job(db, job_id, progress=0.5, progress_message="Preparing export")
 
-        # For now: set public_url to file path (extend with actual CDN upload)
         clip.status = "exported"
-        clip.public_url = clip.storage_path  # In production: upload to R2 and get CDN URL
+        clip.public_url = f"/media/output/{clip.project_id}/{clip.id}.mp4"
         db.commit()
 
         _update_job(
@@ -580,4 +609,3 @@ def pipeline_from_video_task(
         raise
     finally:
         db.close()
-

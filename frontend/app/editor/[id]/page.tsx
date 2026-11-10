@@ -81,9 +81,7 @@ export default function VideoEditorPage({
   const [history, setHistory] = useState<any[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  // Simulated animation ticker for playhead
-  const animationFrameRef = useRef<number | null>(null);
-  const lastTimeRef = useRef<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Load clip and editor state
   useEffect(() => {
@@ -142,40 +140,31 @@ export default function VideoEditorPage({
     }
   };
 
-  // Playhead scrubber loop
-  useEffect(() => {
-    if (!isPlaying) {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      lastTimeRef.current = null;
-      return;
-    }
-
-    const step = (now: number) => {
-      if (lastTimeRef.current !== null) {
-        const delta = (now - lastTimeRef.current) / 1000;
-        setCurrentTime((prev) => {
-          const next = prev + delta;
-          if (next >= duration) {
-            setIsPlaying(false);
-            return 0;
-          }
-          return next;
-        });
-      }
-      lastTimeRef.current = now;
-      animationFrameRef.current = requestAnimationFrame(step);
-    };
-
-    animationFrameRef.current = requestAnimationFrame(step);
-    return () => {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    };
-  }, [isPlaying, duration]);
-
   // Current active caption based on playhead
   const currentCaption = timeline.captions?.find(
     (c: any) => currentTime >= c.start_time && currentTime <= c.end_time
   );
+
+  const togglePlayback = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      try {
+        await video.play();
+      } catch (err) {
+        setError("The clip could not start playing. Check that the rendered video is available.");
+      }
+    } else {
+      video.pause();
+    }
+  };
+
+  const seekTo = (time: number) => {
+    const nextTime = Math.max(0, Math.min(duration, time));
+    if (videoRef.current) videoRef.current.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  };
 
   // Save changes to backend
   const handleSave = async () => {
@@ -351,19 +340,34 @@ export default function VideoEditorPage({
         <div className="flex-1 bg-slate-950 flex flex-col items-center justify-center p-6 relative select-none">
           {/* Vertical 9:16 Canvas Box */}
           <div className="w-[310px] h-[550px] rounded-2xl bg-slate-900 border-2 border-border/80 shadow-2xl relative overflow-hidden flex flex-col justify-between">
-            {/* Visual simulation content with filter and zoom */}
-            <div
-              className="absolute inset-0 bg-gradient-to-b from-indigo-950 via-slate-900 to-purple-950 flex flex-col items-center justify-center p-6 text-center pointer-events-none"
-              style={getFilterStyle()}
-            >
-              <Film className="w-16 h-16 text-purple-400/40 mb-3" />
-              <div className="text-xs font-bold text-slate-300 max-w-[200px]">
-                {clip?.transcript_text?.slice(0, 80) || "Video Frame Preview"}...
+            {clip?.public_url ? (
+              <video
+                ref={videoRef}
+                src={clip.public_url}
+                poster={clip.public_url.replace(/\.mp4$/, "_thumb.jpg")}
+                className="absolute inset-0 h-full w-full object-cover"
+                style={getFilterStyle()}
+                preload="metadata"
+                onLoadedMetadata={(event) => {
+                  const mediaDuration = event.currentTarget.duration;
+                  if (Number.isFinite(mediaDuration)) setDuration(mediaDuration);
+                }}
+                onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => {
+                  setIsPlaying(false);
+                  seekTo(0);
+                }}
+              />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-b from-indigo-950 via-slate-900 to-purple-950 flex flex-col items-center justify-center p-6 text-center">
+                <Film className="w-16 h-16 text-purple-400/40 mb-3" />
+                <div className="text-xs font-bold text-slate-300 max-w-[200px]">
+                  {clip?.status === "rendering" ? "Rendering clip..." : "Rendered video is unavailable"}
+                </div>
               </div>
-              <div className="text-[10px] text-muted-foreground mt-2 font-mono">
-                {currentTime.toFixed(2)}s / {duration.toFixed(2)}s
-              </div>
-            </div>
+            )}
 
             {/* Live Subtitle Overlay */}
             {currentCaption && (
@@ -403,20 +407,23 @@ export default function VideoEditorPage({
           {/* Transport Controls beneath Preview */}
           <div className="mt-4 flex items-center gap-4 bg-card/60 backdrop-blur-md px-6 py-2 rounded-2xl border border-border/60">
             <button
-              onClick={() => setCurrentTime(0)}
+              onClick={() => seekTo(0)}
               className="p-1.5 text-slate-400 hover:text-white transition-colors"
               title="Return to Start"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setIsPlaying(!isPlaying)}
+              onClick={togglePlayback}
               className="w-10 h-10 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-lg shadow-purple-600/25 transition-transform hover:scale-105"
             >
               {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
             </button>
             <button
-              onClick={() => setIsMuted(!isMuted)}
+              onClick={() => {
+                setIsMuted(!isMuted);
+                if (videoRef.current) videoRef.current.muted = !isMuted;
+              }}
               className="p-1.5 text-slate-400 hover:text-white transition-colors"
             >
               {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -549,7 +556,7 @@ export default function VideoEditorPage({
                       key={cap.id || idx}
                       onClick={() => {
                         setSelectedCaptionIdx(idx);
-                        setCurrentTime(cap.start_time);
+                        seekTo(cap.start_time);
                       }}
                       className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
                         selectedCaptionIdx === idx
@@ -720,7 +727,7 @@ export default function VideoEditorPage({
               const rect = e.currentTarget.getBoundingClientRect();
               const clickX = e.clientX - rect.left;
               const ratio = clickX / rect.width;
-              setCurrentTime(Math.max(0, Math.min(duration, ratio * duration)));
+              seekTo(Math.max(0, Math.min(duration, ratio * duration)));
             }}
           >
             {/* Base Video Bar */}
@@ -754,7 +761,7 @@ export default function VideoEditorPage({
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedCaptionIdx(idx);
-                    setCurrentTime(cap.start_time);
+                    seekTo(cap.start_time);
                   }}
                   className={`absolute top-1 bottom-1 rounded-md px-2 flex items-center text-[10px] font-medium truncate cursor-pointer transition-all ${
                     isSelected

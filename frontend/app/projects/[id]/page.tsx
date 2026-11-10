@@ -306,19 +306,31 @@ export default function ProjectWorkspacePage({
                     key={clip.id}
                     className="rounded-2xl border border-border/70 bg-card/60 overflow-hidden shadow-sm flex flex-col justify-between hover:border-purple-500/40 transition-all"
                   >
-                    {/* Top thumbnail or preview banner */}
-                    <div className="aspect-[16/9] bg-slate-900/90 relative flex items-center justify-center p-4 border-b border-border/40">
-                      <div className="text-center space-y-1">
-                        <div className="w-10 h-10 rounded-full bg-purple-600/20 text-purple-400 flex items-center justify-center mx-auto mb-2">
-                          <Play className="w-5 h-5 ml-0.5" />
+                    {/* Rendered clip preview with its original audio track. */}
+                    <div className="aspect-[16/9] bg-slate-900/90 relative overflow-hidden border-b border-border/40">
+                      {clip.public_url ? (
+                        <video
+                          src={clip.public_url}
+                          poster={clip.public_url.replace(/\.mp4$/, "_thumb.jpg")}
+                          controls
+                          preload="metadata"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="h-full flex items-center justify-center p-4">
+                          <div className="text-center space-y-1">
+                            <div className="w-10 h-10 rounded-full bg-purple-600/20 text-purple-400 flex items-center justify-center mx-auto mb-2">
+                              <Play className="w-5 h-5 ml-0.5" />
+                            </div>
+                            <div className="text-xs font-bold text-slate-300">
+                              {clip.status === "rendering" ? "Rendering video..." : "Video unavailable"}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-mono">
+                              {clip.start_time.toFixed(1)}s → {clip.end_time.toFixed(1)}s
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-xs font-bold text-slate-300">
-                          {clip.start_time.toFixed(1)}s → {clip.end_time.toFixed(1)}s
-                        </div>
-                        <div className="text-[10px] text-muted-foreground font-mono">
-                          Duration: {clip.duration.toFixed(1)}s
-                        </div>
-                      </div>
+                      )}
 
                       <div className="absolute top-3 left-3 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-600 text-white">
                         Rank #{clip.rank}
@@ -341,19 +353,19 @@ export default function ProjectWorkspacePage({
                           <div className="text-center">
                             <span className="text-muted-foreground block">Hook</span>
                             <span className="font-semibold text-emerald-400">
-                              {((breakdown.hook_strength || 0.8) * 100).toFixed(0)}%
+                              {breakdown.hook_strength != null ? `${(breakdown.hook_strength * 100).toFixed(0)}%` : "—"}
                             </span>
                           </div>
                           <div className="text-center">
                             <span className="text-muted-foreground block">Relevance</span>
                             <span className="font-semibold text-purple-300">
-                              {((breakdown.relevance || 0.85) * 100).toFixed(0)}%
+                              {breakdown.relevance != null ? `${(breakdown.relevance * 100).toFixed(0)}%` : "—"}
                             </span>
                           </div>
                           <div className="text-center">
                             <span className="text-muted-foreground block">Flow</span>
                             <span className="font-semibold text-indigo-400">
-                              {((breakdown.context_completeness || 0.8) * 100).toFixed(0)}%
+                              {breakdown.context_completeness != null ? `${(breakdown.context_completeness * 100).toFixed(0)}%` : "—"}
                             </span>
                           </div>
                         </div>
