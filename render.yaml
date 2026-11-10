@@ -21,6 +21,6 @@ services:
       - key: CORS_ORIGINS
         sync: false
       - key: DATABASE_URL
-        sync: false
+        value: sqlite+aiosqlite:///./clipped_ai.db
       - key: DATABASE_SYNC_URL
-        sync: false
+        value: sqlite:///./clipped_ai.db
