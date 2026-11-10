@@ -10,6 +10,8 @@ services:
     envVars:
       - key: ENVIRONMENT
         value: production
+      - key: PYTHON_VERSION
+        value: "3.13.5"
       - key: DEBUG
         value: "false"
       - key: SHOW_DOCS
